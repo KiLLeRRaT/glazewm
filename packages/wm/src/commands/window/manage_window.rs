@@ -1,5 +1,5 @@
 use anyhow::Context;
-use tracing::info;
+use tracing::{debug, info, warn};
 use wm_common::{try_warn, WindowRuleEvent, WindowState, WmEvent};
 use wm_platform::{NativeWindow, RectDelta};
 
@@ -23,10 +23,20 @@ pub fn manage_window(
   state: &mut WmState,
   config: &mut UserConfig,
 ) -> anyhow::Result<()> {
-  let Some(native_properties) =
-    check_is_manageable(&native_window).unwrap_or(None)
-  else {
-    return Ok(());
+  let native_properties = match check_is_manageable(&native_window) {
+    Ok(Some(props)) => props,
+    Ok(None) => return Ok(()),
+    Err(err) => {
+      // A transient platform error (e.g. `OpenProcess` failing across
+      // integrity levels, DWM cloak query failing while the window is
+      // initializing) used to be silently dropped here. Log it so that
+      // unmanaged-window bugs are diagnosable.
+      warn!(
+        "Skipping manage of window {:?} due to platform error: {:#}",
+        native_window, err
+      );
+      return Ok(());
+    }
   };
 
   // Create the window instance. This may fail if the window handle has
@@ -87,11 +97,19 @@ pub fn manage_window(
 /// Checks if a window is manageable and retrieves its native properties.
 ///
 /// Returns `Ok(Some(properties))` if the window is manageable and its
-/// properties were retrieved successfully.
+/// properties were retrieved successfully. Returns `Ok(None)` if the
+/// window has been deterministically rejected (e.g. wrong style flags,
+/// non-standard role on macOS). Returns `Err` for transient platform
+/// errors (e.g. cross-integrity `OpenProcess` failure, DWM query
+/// failure) so callers can decide whether to retry or warn.
 fn check_is_manageable(
   native_window: &NativeWindow,
 ) -> anyhow::Result<Option<NativeWindowProperties>> {
   if !native_window.is_visible()? {
+    debug!(
+      "Window {:?} rejected: is_visible() == false (hidden or cloaked).",
+      native_window
+    );
     return Ok(None);
   }
 
@@ -103,6 +121,10 @@ fn check_is_manageable(
       && native_window.subrole()? == "AXStandardWindow";
 
     if !is_standard_window {
+      debug!(
+        "Window {:?} rejected: not a standard AXWindow.",
+        native_window
+      );
       return Ok(None);
     }
   }
@@ -127,10 +149,28 @@ fn check_is_manageable(
       // Ensure window is top-level (i.e. not a child window). Ignore
       // windows that cannot be focused or if they're unavailable in
       // task switcher (alt+tab menu).
-      if native_window.has_window_style(WS_CHILD)
-        || native_window
-          .has_window_style_ex(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)
+      if native_window.has_window_style(WS_CHILD) {
+        debug!(
+          "Window rejected (WS_CHILD): hwnd={:?} process={:?} class={:?} title={:?}",
+          native_window,
+          native_properties.process_name,
+          native_properties.class_name,
+          native_properties.title,
+        );
+        return Ok(None);
+      }
+
+      if native_window
+        .has_window_style_ex(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)
       {
+        debug!(
+          "Window rejected (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW): \
+           hwnd={:?} process={:?} class={:?} title={:?}",
+          native_window,
+          native_properties.process_name,
+          native_properties.class_name,
+          native_properties.title,
+        );
         return Ok(None);
       }
 
@@ -142,6 +182,14 @@ fn check_is_manageable(
       if native_window.has_owner_window()
         && !native_window.has_window_style(WS_CAPTION)
       {
+        debug!(
+          "Window rejected (owner-without-caption): hwnd={:?} \
+           process={:?} class={:?} title={:?}",
+          native_window,
+          native_properties.process_name,
+          native_properties.class_name,
+          native_properties.title,
+        );
         return Ok(None);
       }
     }
