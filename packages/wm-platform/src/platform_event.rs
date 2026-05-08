@@ -70,6 +70,17 @@ pub enum WindowEvent {
     notification: WindowEventNotification,
   },
 
+  /// Window styles (`WS_*` / `WS_EX_*`) changed.
+  ///
+  /// # Platform-specific
+  ///
+  /// - **Windows**: Corresponds to `EVENT_OBJECT_STYLECHANGE`.
+  /// - **macOS**: Never emitted.
+  StylesChanged {
+    window: NativeWindow,
+    notification: WindowEventNotification,
+  },
+
   /// Window was destroyed.
   Destroyed {
     window_id: WindowId,
@@ -89,7 +100,8 @@ impl WindowEvent {
       | Self::Minimized { window, .. }
       | Self::MinimizeEnded { window, .. }
       | Self::Shown { window, .. }
-      | Self::TitleChanged { window, .. } => Some(window),
+      | Self::TitleChanged { window, .. }
+      | Self::StylesChanged { window, .. } => Some(window),
       Self::Destroyed { .. } => None,
     }
   }
@@ -105,6 +117,7 @@ impl WindowEvent {
       | Self::MinimizeEnded { notification, .. }
       | Self::Shown { notification, .. }
       | Self::TitleChanged { notification, .. }
+      | Self::StylesChanged { notification, .. }
       | Self::Destroyed { notification, .. } => notification,
     }
   }

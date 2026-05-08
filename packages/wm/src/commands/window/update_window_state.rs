@@ -29,6 +29,12 @@ pub fn update_window_state(
 
   info!("Updating window state: {:?}.", target_state);
 
+  // Once a window's state has been explicitly changed, drop any
+  // auto-promote marker so we don't fight subsequent style changes.
+  state
+    .auto_floated_for_unresizable
+    .remove(&window.native().id());
+
   match target_state {
     WindowState::Tiling => set_tiling(&window, state, config),
     _ => set_non_tiling(window, target_state, state),

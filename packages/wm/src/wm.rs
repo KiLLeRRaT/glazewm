@@ -40,7 +40,7 @@ use crate::{
     handle_window_destroyed, handle_window_focused, handle_window_hidden,
     handle_window_minimize_ended, handle_window_minimized,
     handle_window_moved_or_resized, handle_window_shown,
-    handle_window_title_changed,
+    handle_window_styles_changed, handle_window_title_changed,
   },
   ipc_server::IpcServer,
   models::{Container, WorkspaceTarget},
@@ -136,6 +136,9 @@ impl WindowManager {
         }
         WindowEvent::TitleChanged { window, .. } => {
           handle_window_title_changed(&window, state, config)
+        }
+        WindowEvent::StylesChanged { window, .. } => {
+          handle_window_styles_changed(&window, state, config)
         }
         WindowEvent::Destroyed { window_id, .. } => {
           handle_window_destroyed(window_id, state)

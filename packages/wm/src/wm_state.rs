@@ -61,6 +61,16 @@ pub struct WmState {
   /// `ignore` command.
   pub ignored_windows: Vec<NativeWindow>,
 
+  /// HWNDs of windows that were initially placed in the floating state
+  /// solely because they reported `!is_resizable` (no `WS_THICKFRAME`)
+  /// at the moment of management. These are tracked so that they can
+  /// be promoted back to the configured default state once the window
+  /// gains the resizable style flag — applications such as Visual
+  /// Studio briefly lack `WS_THICKFRAME` while still initializing
+  /// (#344).
+  pub auto_floated_for_unresizable:
+    std::collections::HashSet<wm_platform::WindowId>,
+
   /// Whether the WM is paused.
   pub is_paused: bool,
 
@@ -92,6 +102,7 @@ impl WmState {
       unmanaged_or_minimized_timestamp: None,
       binding_modes: Vec::new(),
       ignored_windows: Vec::new(),
+      auto_floated_for_unresizable: std::collections::HashSet::new(),
       is_paused: false,
       is_focus_synced: false,
       has_initialized: false,

@@ -19,6 +19,12 @@ pub fn handle_window_focused(
   state: &mut WmState,
   config: &mut UserConfig,
 ) -> anyhow::Result<()> {
+  crate::events::try_promote_auto_floated_window(
+    native_window,
+    state,
+    config,
+  )?;
+
   let found_window = state.window_from_native(native_window);
   let focused_container =
     state.focused_container().context("No focused container.")?;

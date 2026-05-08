@@ -19,6 +19,13 @@ use windows::Win32::{
 use super::NativeWindow;
 use crate::{Dispatcher, WindowEvent, WindowId};
 
+/// MSAA event id fired when a window's `WS_*` / `WS_EX_*` style flags
+/// change.
+///
+/// Not exposed by the `windows` crate version in use; see
+/// <https://learn.microsoft.com/en-us/windows/win32/winauto/event-constants>.
+const EVENT_OBJECT_STYLECHANGE: u32 = 0x8013;
+
 thread_local! {
   /// Sender for window events. For use with hook procedure.
   static EVENT_TX: OnceLock<mpsc::UnboundedSender<WindowEvent>> = const { OnceLock::new() };
@@ -71,6 +78,7 @@ impl WindowListener {
       (EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND),
       (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
       (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE),
+      (EVENT_OBJECT_STYLECHANGE, EVENT_OBJECT_STYLECHANGE),
       (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
     ];
 
@@ -173,6 +181,10 @@ impl WindowListener {
         notification,
       },
       EVENT_OBJECT_NAMECHANGE => WindowEvent::TitleChanged {
+        window: NativeWindow::new(handle.0).into(),
+        notification,
+      },
+      EVENT_OBJECT_STYLECHANGE => WindowEvent::StylesChanged {
         window: NativeWindow::new(handle.0).into(),
         notification,
       },

@@ -214,8 +214,12 @@ fn create_window(
     .context("No nearest workspace.")?;
 
   let gaps_config = config.value.gaps.clone();
-  let window_state =
+  let (window_state, auto_floated_for_unresizable) =
     window_state_to_create(&native_properties, &nearest_monitor, config)?;
+
+  if auto_floated_for_unresizable {
+    state.auto_floated_for_unresizable.insert(native_window.id());
+  }
 
   // Attach the new window as the first child of the target parent (if
   // provided), otherwise, add as a sibling of the focused container.
@@ -310,13 +314,19 @@ fn create_window(
 /// Gets the initial state for a window based on its native state.
 ///
 /// Note that maximized windows are initialized as tiling.
+///
+/// Returns a tuple of `(WindowState, was_auto_floated_for_unresizable)`.
+/// The boolean is `true` if the window was forced into the floating state
+/// purely because it currently lacks the resizable style flag — callers
+/// can use this to track such windows and promote them later if the
+/// style flag is added (see #344).
 fn window_state_to_create(
   native_properties: &NativeWindowProperties,
   nearest_monitor: &Monitor,
   config: &UserConfig,
-) -> anyhow::Result<WindowState> {
+) -> anyhow::Result<(WindowState, bool)> {
   if native_properties.is_minimized {
-    return Ok(WindowState::Minimized);
+    return Ok((WindowState::Minimized, false));
   }
 
   let nearest_workspace = nearest_monitor
@@ -336,24 +346,34 @@ fn window_state_to_create(
       .inset(1)
       .contains_rect(&nearest_workspace.max_workspace_rect()?)
   {
-    return Ok(WindowState::Fullscreen(
-      config
-        .value
-        .window_behavior
-        .state_defaults
-        .fullscreen
-        .clone(),
+    return Ok((
+      WindowState::Fullscreen(
+        config
+          .value
+          .window_behavior
+          .state_defaults
+          .fullscreen
+          .clone(),
+      ),
+      false,
     ));
   }
 
-  // Initialize windows that can't be resized as floating.
+  // Initialize windows that can't be resized as floating. Some
+  // applications (notably Visual Studio) report `!is_resizable`
+  // transiently while still initializing; flagging this case lets
+  // `handle_window_styles_changed` promote such windows back to the
+  // configured default state once they become resizable.
   if !native_properties.is_resizable {
-    return Ok(WindowState::Floating(
-      config.value.window_behavior.state_defaults.floating.clone(),
+    return Ok((
+      WindowState::Floating(
+        config.value.window_behavior.state_defaults.floating.clone(),
+      ),
+      true,
     ));
   }
 
-  Ok(WindowState::default_from_config(&config.value))
+  Ok((WindowState::default_from_config(&config.value), false))
 }
 
 /// Gets where to insert a new window in the container tree.

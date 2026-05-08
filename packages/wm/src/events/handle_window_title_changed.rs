@@ -12,6 +12,12 @@ pub fn handle_window_title_changed(
   state: &mut WmState,
   config: &mut UserConfig,
 ) -> anyhow::Result<()> {
+  crate::events::try_promote_auto_floated_window(
+    native_window,
+    state,
+    config,
+  )?;
+
   let found_window = state.window_from_native(native_window);
 
   if let Some(window) = found_window {
